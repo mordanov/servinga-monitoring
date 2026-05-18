@@ -1,0 +1,49 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  # -------------------------------------------------------------------
+  # Add each of your Servinga VPS servers here.
+  # node_exporter runs on port 9100 by default.
+  #
+  # Setup on each VPS (run once per server):
+  #   wget https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz
+  #   tar xvf node_exporter-1.7.0.linux-amd64.tar.gz
+  #   sudo mv node_exporter-1.7.0.linux-amd64/node_exporter /usr/local/bin/
+  #   sudo useradd -rs /bin/false node_exporter
+  #   sudo systemctl enable --now node_exporter  # (after creating systemd unit below)
+  #
+  # Systemd unit /etc/systemd/system/node_exporter.service:
+  #   [Unit]
+  #   Description=Node Exporter
+  #   After=network.target
+  #   [Service]
+  #   User=node_exporter
+  #   ExecStart=/usr/local/bin/node_exporter
+  #   [Install]
+  #   WantedBy=multi-user.target
+  #
+  # Firewall: allow port 9100 from your dashboard server only:
+  #   ufw allow from YOUR_DASHBOARD_IP to any port 9100
+  # -------------------------------------------------------------------
+
+  - job_name: "servinga_vps"
+    static_configs:
+      - targets:
+          - "1.2.3.4:9100"      # Replace with your VPS #1 IP
+          # - "5.6.7.8:9100"    # VPS #2
+          # - "9.10.11.12:9100" # VPS #3
+        labels:
+          group: "servinga"
+
+    # Optional: add human-readable names via relabeling
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: "1.2.3.4:9100"
+        target_label: server_name
+        replacement: "vps-01"
+      # - source_labels: [__address__]
+      #   regex: "5.6.7.8:9100"
+      #   target_label: server_name
+      #   replacement: "vps-02"

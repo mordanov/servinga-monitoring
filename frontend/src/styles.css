@@ -1,0 +1,66 @@
+/* ── Fonts ─────────────────────────────────────────────────────────────── */
+/* Space Mono for data/headings, DM Sans for body copy */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #0b0d11;
+  --bg-card:     #111419;
+  --bg-card2:    #161a21;
+  --border:      #1e2330;
+  --border-hi:   #2a3045;
+
+  --txt:         #e2e6f0;
+  --txt-dim:     #6b7694;
+  --txt-muted:   #3a4260;
+
+  --green:       #2dea8c;
+  --green-dim:   #1a5c3f;
+  --amber:       #f5a623;
+  --red:         #ff4d6d;
+  --blue:        #4d9fff;
+  --purple:      #a78bfa;
+
+  --font-mono: 'Space Mono', 'Courier New', monospace;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+
+  --radius: 6px;
+  --transition: 200ms ease;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--txt);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* Subtle grid texture on body */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root { position: relative; z-index: 1; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+
+/* Recharts override */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--border) !important;
+}
+.recharts-tooltip-wrapper { outline: none; }
