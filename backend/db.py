@@ -4,10 +4,7 @@ from sqlalchemy import Float, String, DateTime, Integer
 from datetime import datetime, timezone
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/servinga.db")
-# Ensure SQLite async driver prefix
-if DATABASE_URL.startswith("sqlite:///"):
-    DATABASE_URL = DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
