@@ -11,39 +11,62 @@ import httpx
 from sqlalchemy import select
 from db import AsyncSessionLocal, MetricSnapshot
 
-PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus:9090")
+PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus:9090").rstrip("/")
+PROMETHEUS_FALLBACK_URLS = tuple(
+    url.strip().rstrip("/")
+    for url in os.getenv("PROMETHEUS_FALLBACK_URLS", "http://host.docker.internal:9090,http://172.17.0.1:9090")
+    .split(",")
+    if url.strip()
+)
 logger = logging.getLogger(__name__)
+
+
+def _candidate_prometheus_urls() -> tuple[str, ...]:
+    urls: list[str] = []
+    for url in (PROMETHEUS_URL, *PROMETHEUS_FALLBACK_URLS):
+        if url and url not in urls:
+            urls.append(url)
+    return tuple(urls)
+
+
+async def _prometheus_get(path: str, params: dict[str, str], timeout: int) -> dict | None:
+    last_error: Exception | None = None
+    for base_url in _candidate_prometheus_urls():
+        url = f"{base_url}{path}"
+        try:
+            async with httpx.AsyncClient(timeout=timeout, trust_env=False, follow_redirects=True) as client:
+                resp = await client.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("status") == "success":
+                return data
+            logger.warning("Prometheus returned non-success for %s via %s: %s", params.get("query", path), url, data)
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Prometheus request failed for %s via %s: %r", params.get("query", path), url, exc)
+
+    if last_error is not None:
+        logger.warning("Prometheus request failed for %s on all candidate URLs", params.get("query", path))
+    return None
 
 
 async def promql(query: str) -> list[dict]:
     """Run an instant PromQL query, return list of {metric, value} dicts."""
-    url = f"{PROMETHEUS_URL}/api/v1/query"
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, params={"query": query})
-            resp.raise_for_status()
-            data = resp.json()
-            if data.get("status") == "success":
-                return data["data"]["result"]
-    except Exception as exc:
-        logger.warning("PromQL query failed (%s): %s", query, exc)
+    data = await _prometheus_get("/api/v1/query", {"query": query}, timeout=10)
+    if data:
+        return data["data"]["result"]
     return []
 
 
 async def promql_range(query: str, start: str, end: str, step: str = "60s") -> list[dict]:
     """Run a range PromQL query."""
-    url = f"{PROMETHEUS_URL}/api/v1/query_range"
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(url, params={
-                "query": query, "start": start, "end": end, "step": step
-            })
-            resp.raise_for_status()
-            data = resp.json()
-            if data.get("status") == "success":
-                return data["data"]["result"]
-    except Exception as exc:
-        logger.warning("PromQL range query failed (%s): %s", query, exc)
+    data = await _prometheus_get(
+        "/api/v1/query_range",
+        {"query": query, "start": start, "end": end, "step": step},
+        timeout=15,
+    )
+    if data:
+        return data["data"]["result"]
     return []
 
 
