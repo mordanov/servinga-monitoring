@@ -5,6 +5,7 @@ writes MetricSnapshot rows to SQLite.
 """
 import os
 import logging
+import socket
 from datetime import datetime, timezone
 
 import httpx
@@ -14,23 +15,42 @@ from db import AsyncSessionLocal, MetricSnapshot
 PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus:9090").rstrip("/")
 PROMETHEUS_FALLBACK_URLS = tuple(
     url.strip().rstrip("/")
-    for url in os.getenv("PROMETHEUS_FALLBACK_URLS", "http://host.docker.internal:9090,http://172.17.0.1:9090")
+    for url in os.getenv("PROMETHEUS_FALLBACK_URLS", "http://host.docker.internal:9090,http://gateway.docker.internal:9090")
     .split(",")
     if url.strip()
 )
 logger = logging.getLogger(__name__)
 
 
+def _docker_gateway_url() -> str | None:
+    """Return the container's default gateway as a Prometheus URL when available."""
+    try:
+        with open("/proc/net/route", "r", encoding="utf-8") as route_file:
+            next(route_file, None)
+            for line in route_file:
+                fields = line.strip().split()
+                if len(fields) < 4 or fields[1] != "00000000":
+                    continue
+                gateway_hex = fields[2]
+                gateway_ip = socket.inet_ntoa(bytes.fromhex(gateway_hex)[::-1])
+                if gateway_ip and gateway_ip != "0.0.0.0":
+                    return f"http://{gateway_ip}:9090"
+    except OSError:
+        return None
+    return None
+
+
 def _candidate_prometheus_urls() -> tuple[str, ...]:
     urls: list[str] = []
-    for url in (PROMETHEUS_URL, *PROMETHEUS_FALLBACK_URLS):
+    dynamic_gateway_url = _docker_gateway_url()
+    for url in (PROMETHEUS_URL, dynamic_gateway_url, *PROMETHEUS_FALLBACK_URLS):
         if url and url not in urls:
             urls.append(url)
     return tuple(urls)
 
 
 async def _prometheus_get(path: str, params: dict[str, str], timeout: int) -> dict | None:
-    last_error: Exception | None = None
+    failures: list[str] = []
     for base_url in _candidate_prometheus_urls():
         url = f"{base_url}{path}"
         try:
@@ -40,13 +60,16 @@ async def _prometheus_get(path: str, params: dict[str, str], timeout: int) -> di
             data = resp.json()
             if data.get("status") == "success":
                 return data
-            logger.warning("Prometheus returned non-success for %s via %s: %s", params.get("query", path), url, data)
+            failures.append(f"{url} -> non-success response: {data}")
         except Exception as exc:
-            last_error = exc
-            logger.warning("Prometheus request failed for %s via %s: %r", params.get("query", path), url, exc)
+            failures.append(f"{url} -> {exc!r}")
 
-    if last_error is not None:
-        logger.warning("Prometheus request failed for %s on all candidate URLs", params.get("query", path))
+    if failures:
+        logger.warning(
+            "Prometheus request failed for %s on all candidate URLs: %s",
+            params.get("query", path),
+            "; ".join(failures),
+        )
     return None
 
 
