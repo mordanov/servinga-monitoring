@@ -20,7 +20,7 @@ class MetricSnapshot(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     instance: Mapped[str] = mapped_column(String, index=True)       # e.g. "1.2.3.4:9100"
     server_name: Mapped[str] = mapped_column(String, nullable=True) # e.g. "vps-01"
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # CPU
     cpu_usage_pct: Mapped[float] = mapped_column(Float, nullable=True)
